@@ -20,6 +20,9 @@
 
 using std::string;
 using std::vector;
+using std::numeric_limits;
+using std::uniform_real_distribution;
+using std::uniform_int_distribution;
 using std::default_random_engine;
 using std::normal_distribution;
 
@@ -95,6 +98,26 @@ void ParticleFilter::dataAssociation(vector<LandmarkObs> predicted,
    *   probably find it useful to implement this method and use it as a helper 
    *   during the updateWeights phase.
    */
+  
+  for(int i=0;i<observations.size();i++)
+  {
+    LandmarkObs obs = observations[i];
+    double minDist = numeric_limits<double>::max();
+    int predId = -1;
+
+    for(int j=0;j<predicted.size();j++)
+    {
+      LandmarkObs pred = predicted[i];
+      double currDist = dist(pred.x,pred.y,obs.x,obs.y);
+      if(currDist < minDist)
+      {
+        minDist = currDist;
+        predId = pred.id;
+      }
+    }
+
+    observations[i].id = predId;
+  }
 
 }
 
@@ -114,7 +137,55 @@ void ParticleFilter::updateWeights(double sensor_range, double std_landmark[],
    *   and the following is a good resource for the actual equation to implement
    *   (look at equation 3.33) http://planning.cs.uiuc.edu/node99.html
    */
+  for(int i=0;i<num_particles;i++)
+  {
+    Particle p  = particles[i];
+    vector<LandmarkObs> predictions;
+    
+    for(int j=0;j<map_landmarks.landmark_list.size();j++)
+    {
+      if(dist(p.x,p.y,map_landmarks.landmark_list[j].x_f,map_landmarks.landmark_list[j].y_f)<sensor_range)
+      {
+        predictions.push_back(LandmarkObs{map_landmarks.landmark_list[j].id_i,map_landmarks.landmark_list[j].x_f,map_landmarks.landmark_list[j].y_f});
+      }
+    }
 
+    vector<LandmarkObs> observationsTrans;
+    for(int j=0;j<observations.size();j++)
+    {
+      observationsTrans.push_back(LandmarkObs{observations[j].id,cos(p.theta)*observations[j].x - sin(p.theta)*observations[j].y + p.x,sin(p.theta)*observations[j].x + cos(p.theta)*observations[j].y + p.y});
+    }
+
+    dataAssociation(predictions,observationsTrans);
+
+    particles[i].weight = 1.0;
+
+    for (unsigned int j = 0; j < observationsTrans.size(); j++) {
+      
+      // placeholders for observation and associated prediction coordinates
+      double o_x, o_y, pr_x, pr_y;
+      o_x = observationsTrans[j].x;
+      o_y = observationsTrans[j].y;
+
+      int associated_prediction = observationsTrans[j].id;
+
+      // get the x,y coordinates of the prediction associated with the current observation
+      for (unsigned int k = 0; k < predictions.size(); k++) {
+        if (predictions[k].id == associated_prediction) {
+          pr_x = predictions[k].x;
+          pr_y = predictions[k].y;
+        }
+      }
+
+      // calculate weight for this observation with multivariate Gaussian
+      double s_x = std_landmark[0];
+      double s_y = std_landmark[1];
+      double obs_w = ( 1/(2*M_PI*s_x*s_y)) * exp( -( pow(pr_x-o_x,2)/(2*pow(s_x, 2)) + (pow(pr_y-o_y,2)/(2*pow(s_y, 2))) ) );
+
+      // product of this obersvation weight with total observations weight
+      particles[i].weight *= obs_w;
+    }
+  }
 }
 
 void ParticleFilter::resample() {
@@ -124,7 +195,32 @@ void ParticleFilter::resample() {
    * NOTE: You may find std::discrete_distribution helpful here.
    *   http://en.cppreference.com/w/cpp/numeric/random/discrete_distribution
    */
+  vector<Particle> newParticles;
 
+  vector<double> weights;
+  for (int i = 0; i < num_particles; i++) {
+    weights.push_back(particles[i].weight);
+  }
+
+  uniform_int_distribution<int> uniintdist(0, num_particles-1);
+  int index = uniintdist(gen);
+
+  double max_weight = *max_element(weights.begin(), weights.end());
+
+  uniform_real_distribution<double> unirealdist(0.0, max_weight);
+
+  double beta = 0.0;
+
+  for (int i = 0; i < num_particles; i++) {
+    beta += unirealdist(gen) * 2.0;
+    while (beta > weights[index]) {
+      beta -= weights[index];
+      index = (index + 1) % num_particles;
+    }
+    newParticles.push_back(particles[index]);
+  }
+
+  particles = newParticles;
 }
 
 void ParticleFilter::SetAssociations(Particle& particle, 
