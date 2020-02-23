@@ -20,6 +20,10 @@
 
 using std::string;
 using std::vector;
+using std::default_random_engine;
+using std::normal_distribution;
+
+static default_random_engine gen;
 
 void ParticleFilter::init(double x, double y, double theta, double std[]) {
   /**
@@ -30,8 +34,21 @@ void ParticleFilter::init(double x, double y, double theta, double std[]) {
    * NOTE: Consult particle_filter.h for more information about this method 
    *   (and others in this file).
    */
+  normal_distribution<double> errX(0,std[0]);
+  normal_distribution<double> errY(0,std[1]);
+  normal_distribution<double> errTheta(0,std[2]);
   num_particles = 100;  // TODO: Set the number of particles
-
+  for(int i=0;i<100;i++)
+  {
+    Particle p;
+    p.id = i;
+    p.x = x + errX(gen);
+    p.y = y + errY(gen);
+    p.theta = theta + errTheta(gen);
+    p.weight = 1;
+    
+    particles.push_back(p);
+  }
 }
 
 void ParticleFilter::prediction(double delta_t, double std_pos[], 
@@ -44,6 +61,28 @@ void ParticleFilter::prediction(double delta_t, double std_pos[],
    *  http://www.cplusplus.com/reference/random/default_random_engine/
    */
 
+  normal_distribution<double> errX(0,std_pos[0]);
+  normal_distribution<double> errY(0,std_pos[1]);
+  normal_distribution<double> errTheta(0,std_pos[2]);
+
+  for(int i=0;i<num_particles;i++)
+  {
+    if(fabs(yaw_rate) < 0.00001)
+    {
+      particles[i].x += velocity * delta_t * cos(particles[i].theta);
+      particles[i].y += velocity * delta_t * sin(particles[i].theta);
+    }
+    else
+    {
+      particles[i].x += velocity / yaw_rate * (sin(particles[i].theta + yaw_rate*delta_t) - sin(particles[i].theta));
+      particles[i].y += velocity / yaw_rate * (cos(particles[i].theta) - cos(particles[i].theta + yaw_rate*delta_t));
+      particles[i].theta += yaw_rate * delta_t;
+    }
+    
+    particles[i].x += errX(gen);
+    particles[i].y += errY(gen);
+    particles[i].theta += errTheta(gen);
+  }
 }
 
 void ParticleFilter::dataAssociation(vector<LandmarkObs> predicted, 
