@@ -25,6 +25,8 @@ using std::uniform_real_distribution;
 using std::uniform_int_distribution;
 using std::default_random_engine;
 using std::normal_distribution;
+using std::cout;
+using std::endl;
 
 static default_random_engine gen;
 
@@ -37,21 +39,24 @@ void ParticleFilter::init(double x, double y, double theta, double std[]) {
    * NOTE: Consult particle_filter.h for more information about this method 
    *   (and others in this file).
    */
-  normal_distribution<double> errX(0,std[0]);
-  normal_distribution<double> errY(0,std[1]);
-  normal_distribution<double> errTheta(0,std[2]);
+  if(is_initialized) return;
+  normal_distribution<double> errX(x,std[0]);
+  normal_distribution<double> errY(y,std[1]);
+  normal_distribution<double> errTheta(theta,std[2]);
   num_particles = 100;  // TODO: Set the number of particles
-  for(int i=0;i<100;i++)
+  for(int i=0;i<num_particles;i++)
   {
     Particle p;
     p.id = i;
-    p.x = x + errX(gen);
-    p.y = y + errY(gen);
-    p.theta = theta + errTheta(gen);
+    p.x = errX(gen);
+    p.y = errY(gen);
+    p.theta = errTheta(gen);
     p.weight = 1;
     
     particles.push_back(p);
   }
+  is_initialized = true;
+  std::cout<<particles[0].id<<" "<<particles[0].x<<" "<<particles[0].y<<" "<<particles[0].theta<<" "<<particles[0].weight<<std::endl;
 }
 
 void ParticleFilter::prediction(double delta_t, double std_pos[], 
@@ -107,7 +112,7 @@ void ParticleFilter::dataAssociation(vector<LandmarkObs> predicted,
 
     for(int j=0;j<predicted.size();j++)
     {
-      LandmarkObs pred = predicted[i];
+      LandmarkObs pred = predicted[j];
       double currDist = dist(pred.x,pred.y,obs.x,obs.y);
       if(currDist < minDist)
       {
@@ -183,6 +188,7 @@ void ParticleFilter::updateWeights(double sensor_range, double std_landmark[],
       double obs_w = ( 1/(2*M_PI*s_x*s_y)) * exp( -( pow(pr_x-o_x,2)/(2*pow(s_x, 2)) + (pow(pr_y-o_y,2)/(2*pow(s_y, 2))) ) );
 
       // product of this obersvation weight with total observations weight
+      if(obs_w == 0.0) obs_w = 0.00001;
       particles[i].weight *= obs_w;
     }
   }
@@ -232,6 +238,10 @@ void ParticleFilter::SetAssociations(Particle& particle,
   // associations: The landmark id that goes along with each listed association
   // sense_x: the associations x mapping already converted to world coordinates
   // sense_y: the associations y mapping already converted to world coordinates
+  particle.associations.clear();
+  particle.sense_x.clear();
+  particle.sense_y.clear();
+  
   particle.associations= associations;
   particle.sense_x = sense_x;
   particle.sense_y = sense_y;
